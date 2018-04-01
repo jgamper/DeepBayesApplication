@@ -11,7 +11,8 @@ from torchvision.utils import save_image
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self, inp_size, hid_size):
+    def __init__(self, inp_size, hid_size, num_layers, l1_loss=1, l1_weights=1, lam=0.0001,
+                 include_bn=1):
         super(AutoEncoder, self).__init__()
         """
         Here you should define layers of your autoencoder
@@ -30,10 +31,11 @@ class AutoEncoder(nn.Module):
         # Hacky way to introduce hyper-parameters, since we can't modify
         # the functions or class inputs and have to fill only the blanks
         # I used some of these for research question purposes
-        self.num_layers = 3 # Numer of layers
-        self.l1_loss = True # or L2 alternative
-        self.l1_weights = True # or L2 regularisation alternative
-        self.lam = 0.0001 # Parameter regularisation strength
+        self.num_layers = num_layers # Numer of layers
+        self.l1_loss = True if l1_loss==1 else False # or L2 alternative
+        self.l1_weights = True if l1_weights==1 else False # or L2 regularisation alternative
+        self.include_bn = True if include_bn==1 else False
+        self.lam = lam # Parameter regularisation strength
         self.loss_f = nn.L1Loss() if self.l1_loss == True else nn.MSELoss()
         self.weight_f = nn.L1Loss(size_average=False) if self.l1_weights == True else nn.MSELoss(size_average=False)
 
@@ -47,20 +49,27 @@ class AutoEncoder(nn.Module):
         self.decoder_l = [(decoder_l[i], decoder_l[i+1]) for i in range(len(decoder_l[:-1]))]
 
         # Given above build encoder and decoder networks
-        self.encoder = self.return_mlp(self.num_layers, self.encoder_l)
-        self.decoder = self.return_mlp(self.num_layers, self.decoder_l)
+        self.encoder = self.return_mlp(self.num_layers, self.encoder_l, self.include_bn)
+        self.decoder = self.return_mlp(self.num_layers, self.decoder_l, self.include_bn)
 
     @staticmethod
-    def return_mlp(num_layers, num_hidden):
+    def return_mlp(num_layers, num_hidden, include_bn=True):
         """
         Applicant defined function to return an mlp
 
         :param num_layers: int, number of layers
         :param num_hidden: list, with elements being a number of hidden units
+        :param include_bc: boolean, includes batch normalisation if True
+        :param drop_out_loc: int; layer number to add drop out, -1 for no dropout
         """
         # Creates layers in an order Linear, Tanh, Linear, Tanh,.. and so on.. using list comprehension
-        layers = [[nn.Linear(num_hidden[i][0], num_hidden[i][1]), nn.BatchNorm1d(num_hidden[i][1]),
-                   nn.ReLU()] for i in range(num_layers-1)]
+        if include_bn == True:
+            layers = [[nn.Linear(num_hidden[i][0], num_hidden[i][1]), nn.BatchNorm1d(num_hidden[i][1]),
+                       nn.ReLU()] for i in range(num_layers-1)]
+        else:
+            layers = [[nn.Linear(num_hidden[i][0], num_hidden[i][1]),
+                       nn.ReLU()] for i in range(num_layers-1)]
+
         layers = [layer for sublist in layers for layer in sublist]
 
         # Append last layer whihc will be just Linear in this case
@@ -129,7 +138,7 @@ class AutoEncoder(nn.Module):
 
         return loss + reg_loss
 
-def train(model, optimizer, train_loader, test_loader):
+def train(model, optimizer, train_loader):
     for epoch in range(10):
         model.train()
         train_loss, test_loss = 0, 0
@@ -142,21 +151,21 @@ def train(model, optimizer, train_loader, test_loader):
             loss.backward()
             optimizer.step()
             train_loss += loss.data[0]
-        print('=> Epoch: %s Average loss: %.3f' % (epoch, train_loss / len(train_loader.dataset)))
+        # print('=> Epoch: %s Average loss: %.3f' % (epoch, train_loss / len(train_loader.dataset)))
 
-        model.eval()
-        for data, _ in test_loader:
-            data = Variable(data, volatile=True).view(-1, 784)
-            x_rec = model(data)
-            test_loss += model.loss_function(x_rec, data).data[0]
+    model.eval()
+        # for data, _ in test_loader:
+        #     data = Variable(data, volatile=True).view(-1, 784)
+        #     x_rec = model(data)
+        #     test_loss += model.loss_function(x_rec, data).data[0]
+        #
+        # test_loss /= len(test_loader.dataset)
+        # print('=> Test set loss: %.3f' % test_loss)
 
-        test_loss /= len(test_loader.dataset)
-        print('=> Test set loss: %.3f' % test_loss)
-
-        n = min(data.size(0), 8)
-        comparison = torch.cat([data.view(-1, 1, 28, 28)[:n], x_rec.view(-1, 1, 28, 28)[:n]])
-        if not os.path.exists('./pics'): os.makedirs('./pics')
-        save_image(comparison.data.cpu(), 'pics/reconstruction_' + str(epoch) + '.png', nrow=n)
+        # n = min(data.size(0), 8)
+        # comparison = torch.cat([data.view(-1, 1, 28, 28)[:n], x_rec.view(-1, 1, 28, 28)[:n]])
+        # if not os.path.exists('./pics'): os.makedirs('./pics')
+        # save_image(comparison.data.cpu(), 'pics/reconstruction_' + str(epoch) + '.png', nrow=n)
     return model
 
 
