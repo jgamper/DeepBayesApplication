@@ -138,12 +138,12 @@ class AutoEncoder(nn.Module):
 
         return loss + reg_loss
 
-def train(model, optimizer, train_loader):
+def train(model, optimizer, train_loader, gpu_id):
     for epoch in range(10):
         model.train()
         train_loss, test_loss = 0, 0
         for data, _ in train_loader:
-            data = Variable(data).view(-1, 784)
+            data = Variable(data.cuda(gpu_id)).view(-1, 784)
             x_rec = model(data)
             loss = model.loss_function(x_rec, data)
 
