@@ -30,7 +30,7 @@ class AutoEncoder(nn.Module):
         # Hacky way to introduce hyper-parameters, since we can't modify
         # the functions or class inputs and have to fill only the blanks
         # I used some of these for research question purposes
-        self.num_layers = 3 # Numer of layers
+        self.num_layers = 2 # Numer of layers
         self.l1_loss = True # or L2 alternative
         self.l1_weights = True # or L2 regularisation alternative
         self.lam = 0.0001 # Parameter regularisation strength
@@ -81,8 +81,8 @@ class AutoEncoder(nn.Module):
         # Loop over models and their parameters and compute regularisation constraints
         for model in [self.encoder, self.decoder]:
             for param in model.parameters():
-                ## NOTE: REMOVE CUDA BEFORE SUBMITTING
-                target = Variable(torch.zeros(param.size()).cuda(0))
+
+                target = Variable(torch.zeros(param.size()))
                 reg += self.weight_f(param, target)
 
         # Multiply with regularisation strenght and return
