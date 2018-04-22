@@ -9,6 +9,72 @@ from torch.autograd import Variable
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
 
+import sys
+sys.path.append('/home/jevjev/Dropbox/Projects/Dropouts/conrete_dropout')
+from concrete_dropout import ConcreteDropout
+
+class Linear_relu(nn.Module):
+
+    def __init__(self, inp, out):
+        super(Linear_relu, self).__init__()
+        self.model = nn.Sequential(nn.Linear(inp, out), nn.ReLU())
+
+    def forward(self, x):
+        return self.model(x)
+
+class Linear_sigmoid(nn.Module):
+
+    def __init__(self, inp, out):
+        super(Linear_sigmoid, self).__init__()
+        self.model = nn.Sequential(nn.Linear(inp, out), nn.Sigmoid())
+
+    def forward(self, x):
+        return self.model(x)
+
+class DropoutAutoencoder(nn.Module):
+    """Below we define the whole model used in the experiment, which
+    consists of three main layers, and two outputlayers for mean and
+    log variance
+    """
+    def __init__(self, wr, dr, batch_size, D=784):
+        super(DropoutAutoencoder, self).__init__()
+        self.forward_encode = nn.Sequential(ConcreteDropout(Linear_relu(D, 631), input_shape=(batch_size,D), weight_regularizer=wr, dropout_regularizer=dr),
+                                         ConcreteDropout(Linear_relu(631, 478), input_shape=(batch_size,631), weight_regularizer=wr, dropout_regularizer=dr),
+                                         ConcreteDropout(Linear_relu(478, 325), input_shape=(batch_size,478), weight_regularizer=wr, dropout_regularizer=dr),
+                                         ConcreteDropout(Linear_relu(325, 172), input_shape=(batch_size,325), weight_regularizer=wr, dropout_regularizer=dr),
+                                         ConcreteDropout(Linear_sigmoid(172, 20), input_shape=(batch_size,172), weight_regularizer=wr, dropout_regularizer=dr))
+
+        self.forward_decode = nn.Sequential(ConcreteDropout(Linear_relu(20, 172), input_shape=(batch_size,20), weight_regularizer=wr, dropout_regularizer=dr),
+                                         ConcreteDropout(Linear_relu(172, 325), input_shape=(batch_size,172), weight_regularizer=wr, dropout_regularizer=dr),
+                                         ConcreteDropout(Linear_relu(325, 478), input_shape=(batch_size,325), weight_regularizer=wr, dropout_regularizer=dr),
+                                         ConcreteDropout(Linear_relu(478, 631), input_shape=(batch_size,478), weight_regularizer=wr, dropout_regularizer=dr),
+                                         ConcreteDropout(Linear_sigmoid(631, D), input_shape=(batch_size,631), weight_regularizer=wr, dropout_regularizer=dr))
+
+        self.loss_f = nn.MSELoss()
+
+    def encode(self, x):
+        return self.forward_encode(x)
+
+    def decode(self, h):
+        return self.forward_decode(h)
+
+    def forward(self, x):
+        return self.decode(self.encode(x))
+
+    def regularisation_loss(self):
+        reg_loss = 0
+        for i in range(5):
+            reg_loss += (self.forward_encode[i].regularisation() + self.forward_decode[i].regularisation())
+        return reg_loss
+
+    def loss_function(self, recon_x, x):
+
+        loss = self.loss_f(recon_x, x)
+
+        reg_loss = self.regularisation_loss()
+
+        return loss + reg_loss
+
 
 class AutoEncoder(nn.Module):
     def __init__(self, inp_size, hid_size, num_layers, l1_loss=1, l1_weights=1, lam=0.0001,
@@ -151,7 +217,7 @@ def train(model, optimizer, train_loader, gpu_id):
             loss.backward()
             optimizer.step()
             train_loss += loss.data[0]
-        # print('=> Epoch: %s Average loss: %.3f' % (epoch, train_loss / len(train_loader.dataset)))
+        print('=> Epoch: %s Average loss: %.3f' % (epoch, train_loss / len(train_loader.dataset)))
 
     model.eval()
         # for data, _ in test_loader:
