@@ -4,3 +4,4 @@
 /autoencoder_task/pics/
 /autoencoder_task/data/
 /autoencoder_task/__pycache__/
+*.ipynb
